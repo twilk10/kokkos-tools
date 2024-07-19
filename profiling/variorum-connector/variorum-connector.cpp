@@ -534,12 +534,15 @@ operator<<(std::ostream &os,
   switch (deviceType) {
   case Kokkos::Tools::Experimental::DeviceType::Serial:
     os << "CPU";
+    output+="Type: CPU";
     break;
   case Kokkos::Tools::Experimental::DeviceType::OpenMP:
     os << "OpenMP";
+    output+="Type: OpenMP";
     break;
   case Kokkos::Tools::Experimental::DeviceType::Cuda:
     os << "cuda";
+    output+="Type: CUDA";
     break;
   case Kokkos::Tools::Experimental::DeviceType::HIP:
     os << "hip";
@@ -547,25 +550,28 @@ operator<<(std::ostream &os,
     break;
   case Kokkos::Tools::Experimental::DeviceType::OpenMPTarget:
     os << "openmptarget";
+    output+="Type: openmptarget";
     break;
   case Kokkos::Tools::Experimental::DeviceType::HPX:
     os << "hpx";
+    output+="Type: hpx";
     break;
   case Kokkos::Tools::Experimental::DeviceType::Threads:
     os << "threads";
+    output+="Type: threads";
     break;
   case Kokkos::Tools::Experimental::DeviceType::SYCL:
     os << "sycl";
+    output+="Type: SYCL";
     break;
   case Kokkos::Tools::Experimental::DeviceType::OpenACC:
     os << "openacc";
-    break;
-  case Kokkos::Tools::Experimental::DeviceType::Unknown:
-    os << "Unkown";
+    output+="Type: OPENACC";
     break;
 
   default:
     os << "Unknown Device Type";
+    output+="Type: Uknown Device Type";
     break;
   }
   return os;
