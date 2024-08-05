@@ -19,20 +19,20 @@
 // Contact: frye7@llnl.gov
 // Organization: CASC at LLNL
 
-#include <chrono>
+#include <stdio.h>
+#include <inttypes.h>
 #include <cstdlib>
 #include <cstring>
-#include <ctime>
-#include <cxxabi.h>
-#include <dlfcn.h>
-#include <fstream>
-#include <inttypes.h>
-#include <iostream>
-#include <regex>
-#include <stdio.h>
-#include <string>
-#include <unordered_set>
 #include <vector>
+#include <unordered_set>
+#include <string>
+#include <regex>
+//#include <cxxabi.h>
+//#include <dlfcn.h>
+#include <ctime>
+#include <chrono>
+#include <iostream>
+#include <fstream>
 int power       = -1;
 int power1      = 0;
 int power2      = 0;
@@ -42,11 +42,12 @@ long long time2 = 0;
 uint32_t gdevID = -1;
 std::vector<float> gpu_powers;
 std::vector<float> gpu_powers2;
-std::string output = "";
+std::string output   = "";
+std::string filename = "variorumoutput.txt";
 // variorum trial run
 extern "C" {
-#include <jansson.h>
 #include <variorum.h>
+#include <jansson.h>
 }
 
 #include "kp_core.hpp"
@@ -63,9 +64,9 @@ uint64_t nextKernelID;
 std::vector<std::regex> kernelNames;
 std::unordered_set<uint64_t> activeKernels;
 
-typedef void (*initFunction)(const int, const uint64_t, const uint32_t, void *);
+typedef void (*initFunction)(const int, const uint64_t, const uint32_t, void*);
 typedef void (*finalizeFunction)();
-typedef void (*beginFunction)(const char *, const uint32_t, uint64_t *);
+typedef void (*beginFunction)(const char*, const uint32_t, uint64_t*);
 typedef void (*endFunction)(uint64_t);
 
 static initFunction initProfileLibrary         = NULL;
@@ -85,33 +86,45 @@ time_t start_time;
 
 int type_of_profiling =
     0;  // 0 is for both print power & json, 1 is for print power, 2 is for json
-bool usingMPI     = false;
+// bool usingMPI     = false;
 bool verbosePrint = true;
-bool mpiOutPut    = false;
+// bool mpiOutPut    = false;
 
-/*void printFile() {
-
-    std::ofstream file("variorumoutput.txt", std::ios::app); // Open in append
-mode if (!file) { std::cerr << "Error creating the file!" << std::endl; } else {
-        std::cout << "File created or opened successfully." << std::endl;
-    }
-    file.close(); // Close the file
-i}*/
+void kokkosp_parse_args(int argc, char** argv) {
+  // See description in original PR.
+  // argc will always be at least 1 (exe)
+  if (argc == 1) {
+    // No argument, use the default
+  } else if (argc == 2) {
+    // User specified a threshold
+    //  output_threshold = strtod(argv[1], 0);
+  } else {
+    // Too many args
+    //   kokkosp_print_help(argv[0]);
+    exit(1);
+  }
+}
 void printFile() {
-  const std::string filename = "variorumoutput.txt";
+  //  std::string filename = "variorumoutput.txt";
+
+  /*    char* parsed_output_file = getenv("KOKKOS_TOOLS_VARIORUM_OUTPUT_FILE");
+  if (!parsed_output_file) {
+    std::cerr << "Couldn't parse KOKKOS_TOOLS_VARIORUM_OUTPUT_FILE environment
+  variable!\n"; std::abort();
+    }
+  std::string filename = parsed_output_file;
+  */
 
   std::ifstream infile(filename);
   if (infile.good()) {
-    std::cout << "File exists. Clearing contents." << std::endl;
     infile.close();
     std::ofstream file(filename, std::ios::trunc);
   } else {
-    std::cout << "File does not exist. Creating a new file." << std::endl;
     std::ofstream file(filename, std::ios::app);
   }
   infile.close();
 }
-void writeToFile(const std::string &filename, const std::string &data) {
+void writeToFile(const std::string& filename, const std::string& data) {
   std::ofstream file(filename, std::ios::app);
   if (file) {
     file << data;
@@ -128,7 +141,7 @@ void writeToFile(const std::string &filename, const std::string &data) {
 // value.
 std::string variorum_print_power_call() {
   std::string outputString;
-  char *s = NULL;
+  char* s = NULL;
   double power_node, power_sock0, power_mem0, power_gpu0;
   double power_sock1, power_mem1, power_gpu1;
   int ret;
@@ -136,10 +149,10 @@ std::string variorum_print_power_call() {
   if (ret != 0) {
     return "Print power failed!\n";
   }
-  json_t *power_obj = json_loads(s, JSON_DECODE_ANY, NULL);
+  json_t* power_obj = json_loads(s, JSON_DECODE_ANY, NULL);
   // total node measurment
   power_node = json_real_value(json_object_get(power_obj, "power_node"));
-  const char *hostnameChar =
+  const char* hostnameChar =
       json_string_value(json_object_get(power_obj, "hostname"));
   // std::string hostname(hostnameChar);
   // print informatin to screen
@@ -180,86 +193,16 @@ std::string variorum_print_power_call() {
 // Description: function that will call variorum print json and handle the
 // execution errors Pre: None Post: Will print an error message if variorum
 // print json fails. No return value.
-char *variorum_json_call() {
+char* variorum_json_call() {
   int ret;
-  char *s              = NULL;
-  json_t *my_power_obj = NULL;
+  char* s              = NULL;
+  json_t* my_power_obj = NULL;
   my_power_obj         = json_object();
   ret                  = variorum_get_power_json(&s);
   if (ret != 0) {
     printf("First run: JSON get node power failed!\n");
   }
   return s;
-}
-
-// Function: variorum_call_mpi
-// Description: This function will call the variourm helper functions and either
-// write them to
-//              output files or to std::cout depending on what options are
-//              selected
-// Pre: None
-// Post: An output message if variourum returned an error or if it functioned
-// correctly
-void variorum_call_mpi() {
-#if USE_MPI
-  if (usingMPI == true) {
-    int rank;
-    std::string output;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    std::ofstream file;
-    std::ofstream pfile;
-    if (type_of_profiling ==
-        0) {  // if both print power and json options selected
-      if (mpiOutPut) {
-        std::string filenamejson = printpath + "variorum-output-mpi-rank-" +
-                                   std::to_string(rank) + "-json.txt";
-        std::string filenameprintp = printpath + "variorum-output-mpi-rank-" +
-                                     std::to_string(rank) + ".txt";
-
-        file.open(filenamejson, std::ios_base::app);
-        std::ofstream pfile;
-        pfile.open(filenameprintp, std::ios_base::app);
-        char *s = variorum_json_call();
-        file << s;
-        pfile << variorum_print_power_call();
-      } else {
-        std::cout << "MPI Rank " << rank << "\n";
-        output  = variorum_print_power_call();
-        char *s = variorum_json_call();
-        puts(s);
-        std::cout << s << std::endl;
-      }
-
-    } else if (type_of_profiling == 1) {  // if only print power is selected
-      if (mpiOutPut) {
-        std::string filenameprintp = printpath + "variorum-output-mpi-rank-" +
-                                     std::to_string(rank) + ".txt";
-        std::ofstream pfile;
-        pfile.open(filenameprintp, std::ios_base::app);
-        pfile << variorum_print_power_call();
-      } else {
-        std::cout << "MPI Rank " << rank << "\n";
-        output = variorum_print_power_call();
-        std::cout << output << std::endl;
-      }
-    } else if (type_of_profiling == 2) {  // if only json is selecte
-      if (mpiOutPut) {
-        std::string filenamejson = printpath + "variorum-output-mpi-rank-" +
-                                   std::to_string(rank) + "-json.txt";
-        std::ofstream file;
-        file.open(filenamejson, std::ios_base::app);
-        char *s = variorum_json_call();
-        file << s;
-      } else {
-        std::cout << "MPI Rank " << rank << "\n";
-        char *s = variorum_json_call();
-        puts(s);
-        std::cout << s << std::endl;
-      }
-    }
-    file.close();
-  }
-#endif
 }
 
 // Function: variorum_call
@@ -274,130 +217,183 @@ void variorum_call() {
 
   if (type_of_profiling == 0) {
     output  = variorum_print_power_call();
-    char *s = variorum_json_call();
-    // std::cout << s << "\n";
-    char *timestamp_pos = strstr(s, "\"timestamp\":");
-    if (timestamp_pos != nullptr) {
-      timestamp_pos += strlen("\"timestamp\":");
-      char *timestamp_end_pos = strchr(timestamp_pos, ',');
-      if (timestamp_end_pos == nullptr) {
-        timestamp_end_pos = strchr(timestamp_pos, '}');
-      }
-      if (timestamp_end_pos != nullptr) {
-        std::string timestamp_str(timestamp_pos,
-                                  timestamp_end_pos - timestamp_pos);
-        long long timestamp = std::stoll(timestamp_str);
-        // std::cout << "Timestamp: " << timestamp << std::endl;
-        if (power == -1 || time2 != 0) {
-          time1 = timestamp;
-          // std::cout << ""
-        } else {
-          time2 = timestamp;
-        }
-      }
-    }
-    char *num_sockets_pos = strstr(s, "\"num_gpus_per_socket\":");
-    if (num_sockets_pos != nullptr) {
-      num_sockets_pos += strlen("\"num_gpus_per_socket\":");
+    char* s = variorum_json_call();
 
-      char *num_sockets_end_pos = strchr(num_sockets_pos, ',');
-      if (num_sockets_end_pos == nullptr) {
-        num_sockets_end_pos = strchr(num_sockets_pos, '}');
-      }
-      if (num_sockets_end_pos != nullptr) {
-        std::string num_sockets_str(num_sockets_pos,
-                                    num_sockets_end_pos - num_sockets_pos);
-
-        num_sockets = std::stoll(num_sockets_str);
-        //          std::cout << "Number of Sockets: " << num_sockets <<
-        //          std::endl;
-      }
-    }
-    char *power_gpu_watts_pos = strstr(s, "\"power_gpu_watts\":");
-
-    if (power_gpu_watts_pos != nullptr) {
-      // for (int gpu_num = 0; gpu_num <= num_sockets; ++gpu_num) {
-      for (int gpu_num = 0; gpu_num <= gdevID; ++gpu_num) {
-        std::string gpu_key = "\"GPU_" + std::to_string(gpu_num) + "\":";
-        char *gpu_pos       = strstr(power_gpu_watts_pos, gpu_key.c_str());
-        if (gpu_pos != nullptr) {
-          gpu_pos += gpu_key.length();
-          char *gpu_end_pos = strchr(gpu_pos, ',');
-          if (gpu_end_pos == nullptr) {
-            gpu_end_pos = strchr(gpu_pos, '}');
-          }
-          if (gpu_end_pos != nullptr) {
-            std::string gpu_power_str(gpu_pos, gpu_end_pos - gpu_pos);
-            float gpu_power = std::stof(gpu_power_str);
-            //      std::cout << "GPU_" << gpu_num << " Power: " << gpu_power <<
-            //      " Watts  " ;
-            if (power == 0) {
-              gpu_powers.push_back(gpu_power);
-            } else {
-              gpu_powers2.push_back(gpu_power);
-            }
-            if (power == -1) {
-              power1 += gpu_power;
-              //	std::cout << power1 <<" power currently \n" <<
-              // std::endl; 	std::cout << power << "   power \n" <<
-              // std::endl;
-            } else {
-              power2 += gpu_power;
-              // std::cout << power << "   power \n" << std::endl;
-            }
-            // std::cout << power << "  power1 \n"<< std::endl;
-          }
-        }
-      }
-      power += 1;
-      if (power2 != 0) {
-        //	std::cout << "times" << time2 << "  "<< time1 << std::endl;
-
-        //	std::cout << "Energy Estimation\t" <<
-        //((power2+power1)/2)*((time2-time1)*.001) << std::endl;
-      }
-      // std::cout << "power 1 and 2 " << power1 << " " << power2;
-      if (power2 != 0 && power1 != 0) {
-        power1 = 0;
-        power2 = 0;
-        power  = -1;
-        temp   = time2;
-        time2  = 0;
-      }
-    }
-    if (power != 0) {
-      std::cout << "  Gpu start power: " << gpu_powers2[gdevID]
-                << " Gpu end power: " << gpu_powers[gdevID]
-                << "   Energy Estimation:   "
-                << ((gpu_powers[gdevID] + gpu_powers2[0]) / 2) *
-                       ((temp - time1) * .001)
-                << std::endl;
-      output += "  Gpu start power: " + std::to_string(gpu_powers2[gdevID]) +
-                " Gpu end power: " + std::to_string(gpu_powers[gdevID]) +
-                "   Energy Estimation:   " +
-                std::to_string(((gpu_powers[gdevID] + gpu_powers2[0]) / 2) *
-                               ((temp - time1) * .001)) +
-                "\n";
-      writeToFile("variorumoutput.txt", output);
-    }
+    power += 1;
 
     if (power != 0) {
       gpu_powers.clear();
       gpu_powers2.clear();
     }
-  } else if (type_of_profiling == 1) {
-    output = variorum_print_power_call();
-    std::cout << output << std::endl;
-  } else if (type_of_profiling == 2) {
-    char *s = variorum_json_call();
-    std::cout << s << std::endl;
+    // std::cout<< s << std::endl;
+
+    json_error_t error;
+    json_t* root            = NULL;
+    json_t* socket_0        = NULL;
+    json_t* timestamp_value = NULL;
+    json_t* power_gpu_watts = NULL;
+    json_t* gpu_0_value     = NULL;
+
+    // Parse JSON string into a json_t object
+    root = json_loads(s, 0, &error);
+    if (!root) {
+      fprintf(stderr, "Error parsing JSON: %s\n", error.text);
+    }
+
+    const char* key;
+    json_t* value;
+    json_object_foreach(root, key, value) {
+      if (json_is_object(value)) {
+        json_t* socket_object = json_object_get(value, "socket_0");
+        if (socket_object && json_is_object(socket_object)) {
+          socket_0        = socket_object;
+          timestamp_value = json_object_get(value, "timestamp");
+          if (time1 == 0) {
+            time1 = (long long)json_integer_value(timestamp_value);
+          } else {
+            time2 = (long long)json_integer_value(timestamp_value);
+          }
+          break;
+        }
+      }
+    }
+
+    if (!socket_0 || !timestamp_value) {
+      fprintf(stderr, "Failed to find 'socket_0' object or 'timestamp'.\n");
+    }
+
+    // Access power_gpu_watts within socket_0
+    power_gpu_watts = json_object_get(socket_0, "power_gpu_watts");
+    if (!json_is_object(power_gpu_watts)) {
+      fprintf(stderr, "Expected 'power_gpu_watts' to be an object.\n");
+    }
+    if (gdevID == 0) {
+      // Access GPU_0 value within power_gpu_watts
+      gpu_0_value = json_object_get(power_gpu_watts, "GPU_0");
+      if (!json_is_real(gpu_0_value)) {
+        fprintf(stderr, "Expected 'GPU_0' to be a number.\n");
+      }
+      double gpu_0 = json_real_value(gpu_0_value);
+      if (power1 == 0) {
+        power1 = gpu_0;
+      } else {
+        power2 = gpu_0;
+      }
+    }
+
+    if (gdevID == 0) {
+      switch (gdevID) {
+        case 1: {
+          json_t* gpu_value = json_object_get(power_gpu_watts, "GPU_1");
+          if (json_is_real(gpu_value)) {
+            double gpu_power = json_real_value(gpu_value);
+            if (power1 == 0) {
+              power1 = gpu_power;
+            } else {
+              power2 = gpu_power;
+            }
+          }
+          break;
+        }
+        case 2: {
+          json_t* gpu_value = json_object_get(power_gpu_watts, "GPU_2");
+          if (json_is_real(gpu_value)) {
+            double gpu_power = json_real_value(gpu_value);
+
+            if (power1 == 0) {
+              power1 = gpu_power;
+            } else {
+              power2 = gpu_power;
+            }
+          }
+          break;
+        }
+        case 3: {
+          json_t* gpu_value = json_object_get(power_gpu_watts, "GPU_3");
+          if (json_is_real(gpu_value)) {
+            double gpu_power = json_real_value(gpu_value);
+
+            if (power1 == 0) {
+              power1 = gpu_power;
+            } else {
+              power2 = gpu_power;
+            }
+          }
+          break;
+        }
+        case 4: {
+          json_t* gpu_value = json_object_get(power_gpu_watts, "GPU_4");
+          if (json_is_real(gpu_value)) {
+            double gpu_power = json_real_value(gpu_value);
+
+            if (power1 == 0) {
+              power1 = gpu_power;
+            } else {
+              power2 = gpu_power;
+            }
+          }
+          break;
+        }
+        case 5: {
+          json_t* gpu_value = json_object_get(power_gpu_watts, "GPU_5");
+          if (json_is_real(gpu_value)) {
+            double gpu_power = json_real_value(gpu_value);
+
+            if (power1 == 0) {
+              power1 = gpu_power;
+            } else {
+              power2 = gpu_power;
+            }
+          }
+          break;
+        }
+        case 6: {
+          json_t* gpu_value = json_object_get(power_gpu_watts, "GPU_6");
+          if (json_is_real(gpu_value)) {
+            double gpu_power = json_real_value(gpu_value);
+
+            if (power1 == 0) {
+              power1 = gpu_power;
+            } else {
+              power2 = gpu_power;
+            }
+          }
+          break;
+        }
+        case 7: {
+          json_t* gpu_value = json_object_get(power_gpu_watts, "GPU_7");
+          if (json_is_real(gpu_value)) {
+            double gpu_power = json_real_value(gpu_value);
+
+            if (power1 == 0) {
+              power1 = gpu_power;
+            } else {
+              power2 = gpu_power;
+            }
+          }
+          break;
+        }
+      }
+    }
+
+    if (power2 != 0 && power1 != 0) {
+      temp = time2;
+
+      output = "  Energy Estimation " + std::to_string(((power1 + power2) / 2) *
+                                                       ((temp - time1) * .001));
+
+      writeToFile(filename, output);
+      power1 = 0;
+      power2 = 0;
+      power  = -1;
+      time2  = 0;
+    }
   }
 }
-
 void kokkosp_init_library(const int loadSeq, const uint64_t interfaceVer,
                           const uint32_t devInfoCount,
-                          Kokkos_Profiling_KokkosPDeviceInfo *deviceInfo) {
-  char *outputPathChar;
+                          Kokkos_Profiling_KokkosPDeviceInfo* deviceInfo) {
+  char* outputPathChar;
   try {
     outputPathChar = getenv("VARIORUM_OUTPUT_PATH");
     if (outputPathChar == NULL) {
@@ -416,7 +412,7 @@ void kokkosp_init_library(const int loadSeq, const uint64_t interfaceVer,
 
   // Profiling options are read in from their enviornment variables and the
   // options are set
-  char *profiling_type;
+  char* profiling_type;
   try {
     profiling_type = getenv("KOKKOS_VARIORUM_FUNC_TYPE");
     if (profiling_type == NULL) {
@@ -443,7 +439,7 @@ void kokkosp_init_library(const int loadSeq, const uint64_t interfaceVer,
     }
   }
   try {
-    char *verbosePrintStr = getenv("VERBOSE");
+    char* verbosePrintStr = getenv("VERBOSE");
     if (verbosePrintStr == NULL) {
       throw 10;
     }
@@ -461,7 +457,7 @@ void kokkosp_init_library(const int loadSeq, const uint64_t interfaceVer,
                  "not be verbose \n Format - Hosntame : Node power value\n";
   }
   try {
-    char *usingMPIstr = getenv("VARIORUM_USING_MPI");
+    char* usingMPIstr = getenv("VARIORUM_USING_MPI");
     if (usingMPIstr == NULL) {
       throw 10;
     }
@@ -469,35 +465,11 @@ void kokkosp_init_library(const int loadSeq, const uint64_t interfaceVer,
       throw 20;
     }
     if (strcmp(usingMPIstr, "true") == 0) {
-#if USE_MPI
-      usingMPI = true;
-      try {
-        char *perRankOutput = getenv("RANKED_OUTPUT");
-        if (strcmp(perRankOutput, "false") == 0 ||
-            strcmp(perRankOutput, "") == 0) {
-          mpiOutPut = false;
-        } else if (strcmp(perRankOutput, "true") == 0) {
-          mpiOutPut = true;
-        } else {
-          mpiOutPut = false;
-        }
-
-      } catch (int f) {
-        std::cout << "Ranked output will no be used, error setting paramters"
-                  << std::endl;
-        mpiOutPut = false;
-      }
-#else
-      usingMPI = false;
-      std::cout << "Ignoring MPI enabled in Variorum: the connector was built "
-                   "without MPI support"
-                << std::endl;
-#endif
     }
   } catch (int e) {
     std::cout << "No MPI Option provided, not using per rank output"
               << std::endl;
-    usingMPI = false;
+    //  usingMPI = false;
   }
   // Simple timer code to keep track of the general amount of time the
   // application ran for.
@@ -507,181 +479,98 @@ void kokkosp_init_library(const int loadSeq, const uint64_t interfaceVer,
   // variorum_call();
 }
 
-void kokkosp_finalize_library() {
-  /*	std::cout << "kokkos library call\n" << std::endl;
-    if (usingMPI) {
-      variorum_call_mpi();
-    } else {
-     variorum_call();
-    }
-    time_t total_time;
-    time_t end_time;
-    time(&end_time);
-    std::cout << "End Time: " << end_time << "\nStart Time: " << start_time
-              << "\n";
-    total_time = end_time - start_time;
-
-    std::cout << "The kokkos library was alive for " << total_time << "
-    seconds."
-              << std::endl;*/
-}
-
-std::ostream &operator<<(
-    std::ostream &os,
-    const Kokkos::Tools::Experimental::DeviceType &deviceType) {
+std::string deviceTypeToString(
+    const Kokkos::Tools::Experimental::DeviceType& deviceType) {
   switch (deviceType) {
     case Kokkos::Tools::Experimental::DeviceType::Serial:
-      os << "CPU";
-      output += "Type: CPU";
+      return "SERIAL";
       break;
     case Kokkos::Tools::Experimental::DeviceType::OpenMP:
-      os << "OpenMP";
-      output += "Type: OpenMP";
+      return "OPENMP";
       break;
-    case Kokkos::Tools::Experimental::DeviceType::Cuda:
-      os << "cuda";
-      output += "Type: CUDA";
-      break;
-    case Kokkos::Tools::Experimental::DeviceType::HIP:
-      os << "hip";
-      output += "Type: HIP";
-      break;
+    case Kokkos::Tools::Experimental::DeviceType::Cuda: return "CUDA"; break;
+    case Kokkos::Tools::Experimental::DeviceType::HIP: return "HIP"; break;
     case Kokkos::Tools::Experimental::DeviceType::OpenMPTarget:
-      os << "openmptarget";
-      output += "Type: openmptarget";
+      return "OPENMPTARGET";
       break;
-    case Kokkos::Tools::Experimental::DeviceType::HPX:
-      os << "hpx";
-      output += "Type: hpx";
-      break;
+    case Kokkos::Tools::Experimental::DeviceType::HPX: return "HPX"; break;
     case Kokkos::Tools::Experimental::DeviceType::Threads:
-      os << "threads";
-      output += "Type: threads";
+      return "THREADS";
       break;
-    case Kokkos::Tools::Experimental::DeviceType::SYCL:
-      os << "sycl";
-      output += "Type: SYCL";
-      break;
+    case Kokkos::Tools::Experimental::DeviceType::SYCL: return "SYCL"; break;
     case Kokkos::Tools::Experimental::DeviceType::OpenACC:
-      os << "openacc";
-      output += "Type: OPENACC";
+      return "OPENACC";
       break;
-
-    default:
-      os << "Unknown Device Type";
-      output += "Type: Uknown Device Type";
-      break;
+    default: return "UNKOWN";
   }
-  return os;
 }
 
-std::ostream &operator<<(
-    std::ostream &os,
-    const Kokkos::Tools::Experimental::ExecutionSpaceIdentifier &identifier) {
-  os << "  Type: " << identifier.type << "";
-  os << "  Device ID: " << identifier.device_id << "";
+std::ostream& operator<<(
+    std::ostream& os,
+    const Kokkos::Tools::Experimental::ExecutionSpaceIdentifier& identifier) {
   gdevID = identifier.device_id;
-  os << "  Instance ID: " << identifier.instance_id;
-  //   output += " Device ID: " + std::to_string(identifier.device_id) +
-  //                      " Instance ID: " +
-  //                      std::to_string(identifier.instance_id);
-  writeToFile("variorumoutput.txt", output);
+
+  output +=
+      " Device ID: " + std::to_string(identifier.device_id) +
+      " Instance ID: " + std::to_string(identifier.instance_id) +
+      " DeviceType: " +
+      deviceTypeToString(static_cast<Kokkos::Tools::Experimental::DeviceType>(
+          identifier.device_id));
+
+  writeToFile(filename, output);
   return os;
 }
 
-void kokkosp_begin_parallel_for(const char *name, const uint32_t devID,
-                                uint64_t *kID) {
+void kokkosp_begin_parallel_for(const char* name, const uint32_t devID,
+                                uint64_t* kID) {
   if (filemake == -1) {
     printFile();
     filemake++;
   }
 
-  // writeToFile("variorumoutput.txt", "This is a new line added from main().");
-  std::cout << "name  " << name;
-  output += "name: " + std::string(name);
-  auto result2 = Kokkos::Tools::Experimental::identifier_from_devid(devID);
-  std::cout << result2;
-  if (usingMPI) {
-    variorum_call_mpi();
-  } else {
-    variorum_call();
-  }
-}
-
-void kokkosp_end_parallel_for(const uint64_t kID) {
-  if (usingMPI) {
-    variorum_call_mpi();
-  } else {
-    variorum_call();
-  }
-}
-
-void kokkosp_begin_parallel_scan(const char *name, const uint32_t devID,
-                                 uint64_t *kID) {
-  gdevID = devID;
-  if (filemake == -1) {
-    printFile();
-    filemake++;
-  }
-  // writeToFile("variorumoutput.txt", "This is a new line added from main().");
-  std::cout << "name:" << name;
-  output += "name: " + std::string(name);
-  auto result1 = Kokkos::Tools::Experimental::identifier_from_devid(devID);
-  std::cout << result1;
-  if (usingMPI) {
-    variorum_call_mpi();
-  } else {
-    variorum_call();
-  }
-}
-
-void kokkosp_end_parallel_scan(const uint64_t kID) {
-  if (usingMPI) {
-    variorum_call_mpi();
-  } else {
-    variorum_call();
-  }
-}
-
-void kokkosp_begin_parallel_reduce(const char *name, const uint32_t devID,
-                                   uint64_t *kID) {
-  //        std::cout << "kernel ID33" << kID ;
-  if (filemake == -1) {
-    printFile();
-    filemake++;
-  }
-
-  //	writeToFile("variorumoutput.txt","name: "+std::string(name));
-  output += "name: " + std::string(name);
-  std::cout << "name:" << name;
+  writeToFile(filename, "name: " + std::string(name));
   gdevID      = devID;
   auto result = Kokkos::Tools::Experimental::identifier_from_devid(devID);
   std::cout << result;
-  //	printExecutionSpaceIdentifier(result);
-  if (usingMPI) {
-    variorum_call_mpi();
-  } else {
-    variorum_call();
-  }
-  //  std::cout << "power1 and two" << power1 << " " << power2 << std::endl;
+  variorum_call();
 }
 
-void kokkosp_end_parallel_reduce(const uint64_t kID) {
-  if (usingMPI) {
-    variorum_call_mpi();
-  } else {
-    variorum_call();
-  }
+void kokkosp_end_parallel_for(const uint64_t kID) { variorum_call(); }
 
-  // std::cout << "power1 and two" << power1 << " " << power2 << std::endl;
+void kokkosp_begin_parallel_scan(const char* name, const uint32_t devID,
+                                 uint64_t* kID) {
+  if (filemake == -1) {
+    printFile();
+    filemake++;
+  }
+  writeToFile(filename, "name: " + std::string(name));
+  gdevID      = devID;
+  auto result = Kokkos::Tools::Experimental::identifier_from_devid(devID);
+  std::cout << result;
+  variorum_call();
 }
+
+void kokkosp_end_parallel_scan(const uint64_t kID) { variorum_call(); }
+
+void kokkosp_begin_parallel_reduce(const char* name, const uint32_t devID,
+                                   uint64_t* kID) {
+  if (filemake == -1) {
+    printFile();
+    filemake++;
+  }
+  writeToFile(filename, "name: " + std::string(name));
+  gdevID      = devID;
+  auto result = Kokkos::Tools::Experimental::identifier_from_devid(devID);
+  std::cout << result;
+  variorum_call();
+}
+
+void kokkosp_end_parallel_reduce(const uint64_t kID) { variorum_call(); }
 
 Kokkos::Tools::Experimental::EventSet get_event_set() {
   Kokkos::Tools::Experimental::EventSet my_event_set;
   memset(&my_event_set, 0,
          sizeof(my_event_set));  // zero any pointers not set here
-  my_event_set.init                  = kokkosp_init_library;
-  my_event_set.finalize              = kokkosp_finalize_library;
   my_event_set.begin_parallel_for    = kokkosp_begin_parallel_for;
   my_event_set.begin_parallel_reduce = kokkosp_begin_parallel_reduce;
   my_event_set.begin_parallel_scan   = kokkosp_begin_parallel_scan;
@@ -698,8 +587,6 @@ extern "C" {
 
 namespace impl = KokkosTools::VariorumConnector;
 
-EXPOSE_INIT(impl::kokkosp_init_library)
-EXPOSE_FINALIZE(impl::kokkosp_finalize_library)
 EXPOSE_BEGIN_PARALLEL_FOR(impl::kokkosp_begin_parallel_for)
 EXPOSE_END_PARALLEL_FOR(impl::kokkosp_end_parallel_for)
 EXPOSE_BEGIN_PARALLEL_SCAN(impl::kokkosp_begin_parallel_scan)
