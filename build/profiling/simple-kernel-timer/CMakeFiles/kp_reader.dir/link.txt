@@ -1,1 +1,0 @@
-/usr/bin/c++ CMakeFiles/kp_reader.dir/kp_reader.cpp.o -o kp_reader  -Wl,-rpath,/home/kuw/kokkos-tools/build/profiling/simple-kernel-timer: libkp_kernel_timer.so 

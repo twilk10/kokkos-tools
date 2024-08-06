@@ -1,1 +1,0 @@
-/usr/bin/c++ CMakeFiles/kp_json_writer.dir/kp_json_writer.cpp.o -o kp_json_writer  -Wl,-rpath,/home/kuw/kokkos-tools/build/profiling/simple-kernel-timer: libkp_kernel_timer.so 

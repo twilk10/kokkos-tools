@@ -1,1 +1,0 @@
-/usr/bin/c++ -fPIC -shared -Wl,-soname,libkp_hwm.so -o libkp_hwm.so CMakeFiles/kp_hwm.dir/kp_hwm.cpp.o 
