@@ -13,7 +13,7 @@
 // See https://kokkos.org/LICENSE for license information.
 // SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
 //
-//@HEADER140
+//@HEADER
 
 // Modified by Zach Frye at LLNL
 // Contact: frye7@llnl.gov
