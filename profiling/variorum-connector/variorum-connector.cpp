@@ -39,8 +39,6 @@ int power2      = 0;
 int filemake    = -1;
 long long time1 = 0;
 long long time2 = 0;
-// This is a global variable instituted to track what the device ID is
-uint32_t gdevID = -1;
 // This is a global output string that can be used to place variables to be
 // printed to the output file
 std::string output = "";
@@ -90,7 +88,6 @@ time_t start_time;
 int type_of_profiling =
     0;  // 0 is for both print power & json, 1 is for print power, 2 is for json
 
-bool verbosePrint = true;
 
 inline std::string getFile(const char* env_var_name) {
   char* parsed_output_file = getenv(env_var_name);
@@ -130,7 +127,7 @@ inline void writeToFile(const std::string& filename, const std::string& data) {
 // value.
 std::string variorum_print_power_call() {
   std::string outputString;
-  char* s = NULL;
+  char* s = nullptr;
   double power_node, power_sock0, power_mem0, power_gpu0;
   double power_sock1, power_mem1, power_gpu1;
   int ret;
@@ -143,38 +140,6 @@ std::string variorum_print_power_call() {
   power_node = json_real_value(json_object_get(power_obj, "power_node"));
   const char* hostnameChar =
       json_string_value(json_object_get(power_obj, "hostname"));
-  // print informatin to screen
-  if (verbosePrint) {
-    // socket 1 measurements
-    power_sock0 =
-        json_real_value(json_object_get(power_obj, "power_cpu_socket_0"));
-    power_mem0 =
-        json_real_value(json_object_get(power_obj, "power_mem_socket_0"));
-    power_gpu0 =
-        json_real_value(json_object_get(power_obj, "power_gpu_socket_0"));
-    // socket 2 measurements
-    power_sock1 =
-        json_real_value(json_object_get(power_obj, "power_cpu_socket_1"));
-    power_mem1 =
-        json_real_value(json_object_get(power_obj, "power_mem_socket_1"));
-    power_gpu1 =
-        json_real_value(json_object_get(power_obj, "power_gpu_socket_1"));
-
-    outputString += "Total Node Power: " + std::to_string(power_node);
-    outputString += "\n Socket 1 Power";
-    outputString += "\n CPU Socket 1: " + std::to_string(power_sock0);
-    outputString += "\n Mem Socket 1: " + std::to_string(power_mem0);
-    outputString += "\n GPU Socket 1: " + std::to_string(power_gpu0);
-    outputString += "\n Socket 2 Power";
-    outputString += "\n CPU Socket 2: " + std::to_string(power_sock1);
-    outputString += "\n Mem Socket 2: " + std::to_string(power_mem1);
-    outputString += "\n GPU Socket 2: " + std::to_string(power_gpu1) + "\n";
-  } else {
-
-  }
-
-  return outputString;
-}
 
 // Function: variorum_json_call()
 // Description: function that will call variorum print json and handle the
@@ -208,11 +173,11 @@ void variorum_call() {
     power += 1;
 
     json_error_t error;
-    json_t* root            = NULL;
-    json_t* socket_0        = NULL;
-    json_t* timestamp_value = NULL;
-    json_t* power_gpu_watts = NULL;
-    json_t* gpu_0_value     = NULL;
+    json_t* root            = nullptr;
+    json_t* socket_0        = nullptr;
+    json_t* timestamp_value = nullptr;
+    json_t* power_gpu_watts = nullptr;
+    json_t* gpu_0_value     = nullptr;
 
     // Parse JSON string into a json_t object
     root = json_loads(s, 0, &error);
@@ -406,10 +371,9 @@ void kokkosp_begin_parallel_for(const char* name, const uint32_t devID,
     filemake++;
   }
 
-  writeToFile(filename, "name: " + std::string(name));
+  writeToFile(filename, "name: " + std::string(name)+"  ");
 
   auto result = Kokkos::Tools::Experimental::identifier_from_devid(devID);
-  gdevID      = result.device_id;
   output +=
       " Device ID: " + std::to_string(result.device_id) +
       " Instance ID: " + std::to_string(result.instance_id) + " DeviceType: " +
@@ -431,7 +395,6 @@ void kokkosp_begin_parallel_scan(const char* name, const uint32_t devID,
   writeToFile(filename, "name: " + std::string(name));
 
   auto result = Kokkos::Tools::Experimental::identifier_from_devid(devID);
-  gdevID      = result.device_id;
   output +=
       " Device ID: " + std::to_string(result.device_id) +
       " Instance ID: " + std::to_string(result.instance_id) + " DeviceType: " +
@@ -452,7 +415,6 @@ void kokkosp_begin_parallel_reduce(const char* name, const uint32_t devID,
   writeToFile(filename, "name: " + std::string(name));
 
   auto result = Kokkos::Tools::Experimental::identifier_from_devid(devID);
-  gdevID      = result.device_id;
   output +=
       " Device ID: " + std::to_string(result.device_id) +
       " Instance ID: " + std::to_string(result.instance_id) + " DeviceType: " +
