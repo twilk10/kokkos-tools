@@ -267,7 +267,6 @@ void variorum_call() {
     } else {
       power2 = gpu_0;
     }
-    *
 
         if (power2 != 0 && power1 != 0) {
       temp = time2;
