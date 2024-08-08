@@ -1,4 +1,4 @@
-//@HEADER140
+//@HEADER
 //
 // ************************************************************************
 //
@@ -31,20 +31,28 @@
 #include <chrono>
 #include <iostream>
 #include <fstream>
-// The variable below assist with logic and serve as a way to save measurements
-// for calaculation
-int power       = -1;
-int power1      = 0;
-int power2      = 0;
-int filemake    = -1;
-long long time1 = 0;
-long long time2 = 0;
+int power = -1;  // This variable is used to keep track of if variorum call has
+                 // been called twice to check if the variables need to be reset
+                 // for the next kernel
+double power1 =
+    0;  // This variable is used to obtain the initial power for calculation
+double power2 =
+    0;  // This variable is used to obtain the final power for calculation
+int filemake = -1;  // This variable is to check if the file has already been
+                    // made earlier in the program
+long long time1 =
+    0;  // This variable is used to obtain the initial time for calculation
+long long time2 =
+    0;  // This variable is used to obtain the final time for calculation
+uint32_t gdevID = -1;  // This variable is used to access the device ID from any
+                       // function throughout the program
+std::string filename;  // This variable is to access the file from any function
+                       // throughout the project
 // This is a global output string that can be used to place variables to be
 // printed to the output file
 std::string output = "";
 // This variable is a file name variorum output for the output of the variorum
 // call
-std::string filename = "variorumoutput.txt";
 // variorum trial run
 extern "C" {
 #include <variorum.h>
@@ -88,19 +96,20 @@ time_t start_time;
 int type_of_profiling =
     0;  // 0 is for both print power & json, 1 is for print power, 2 is for json
 
-
 inline std::string getFile(const char* env_var_name) {
   char* parsed_output_file = getenv(env_var_name);
   if (!parsed_output_file) {
     std::cerr << "Couldn't parse KOKKOS_TOOLS_VARIORUM_OUTPUT_FILE environment "
-                 "variable!\n";
-    std::abort();
+                 "variable! Printed to variorumoutput.txt\n";
+    //  parsed_output_file = "variorumoutput.txt";
+    char vararr[19]    = "variorumoutput.txt";
+    parsed_output_file = vararr;
   }
   return std::string(parsed_output_file);
 }
 
 void printFile() {
-  // std::string filename = getFile("KOKKOS_TOOLS_VARIORUM_OUTPUT_FILE");
+  filename = getFile("KOKKOS_TOOLS_VARIORUM_OUTPUT_FILE");
 
   std::ifstream infile(filename);
   if (infile.good()) {
@@ -140,7 +149,7 @@ std::string variorum_print_power_call() {
   power_node = json_real_value(json_object_get(power_obj, "power_node"));
   const char* hostnameChar =
       json_string_value(json_object_get(power_obj, "hostname"));
-
+}
 // Function: variorum_json_call()
 // Description: function that will call variorum print json and handle the
 // execution errors Pre: None Post: Will print an error message if variorum
@@ -213,35 +222,27 @@ void variorum_call() {
       fprintf(stderr, "Expected 'power_gpu_watts' to be an object.\n");
     }
 
-    std::cout << "Device ID: " << gdevID << std::endl;
-
     std::string gpu_key = "GPU_" + std::to_string(gdevID);
     json_t* power_value = json_object_get(power_gpu_watts, gpu_key.c_str());
     if (json_is_number(power_value)) {
-      double power = json_number_value(power_value);
-      std::cout << "Power for " << gpu_key << ": " << power << " watts"
-                << std::endl;
+      double power_val = json_number_value(power_value);
+      if (power1 == 0) {
+        power1 = power_val;
+      } else {
+        power2 = power_val;
+      }
+
     } else {
       std::cerr << "Error: GPU key " << gpu_key << " not found or not a number"
                 << std::endl;
     }
 
-    double gpu_0 = json_real_value(gpu_0_value);
-    if (power1 == 0) {
-      power1 = gpu_0;
-    } else {
-      power2 = gpu_0;
-    }
-
-        if (power2 != 0 && power1 != 0) {
+    if (power2 != 0 && power1 != 0) {
       temp = time2;
+      std::string calc =
+          std::to_string((((power1 + power2) / 2) * ((temp - time1) * .001)));
 
-      output =
-          "  Energy Estimation " +
-          std::to_string(((power1 + power2) / 2) * ((temp - time1) * .001) +
-                         "Joules");
-
-      writeToFile(filename, output);
+      writeToFile(filename, " Energy Estimation in Joules " + calc);
       power1 = 0;
       power2 = 0;
       power  = -1;
@@ -280,11 +281,6 @@ void kokkosp_init_library(const int loadSeq, const uint64_t interfaceVer,
     if (strcmp(profiling_type, "ppower") == 0) {
       type_of_profiling = 1;
       std::cout << "Variorum print power will be called\n";
-      if (verbosePrint == true) {
-        std::cout
-            << "Power Format: \n Hostname: total node power, cpuSocket1, "
-               "memScoket1, gpuSocket1, cpuSocket2, memScoket2, gpuSocket2 \n";
-      }
     } else if (strcmp(profiling_type, "json") == 0) {
       type_of_profiling = 2;
     } else if (strcmp(profiling_type, "both") == 0) {
@@ -308,34 +304,15 @@ void kokkosp_init_library(const int loadSeq, const uint64_t interfaceVer,
     } else if (strcmp(verbosePrintStr, "true") == 0) {
       std::cout << "Verbose power option set"
                 << "\n";
-      verbosePrint = true;
     }
   } catch (int e) {
-    verbosePrint = false;
     std::cout << "No verbose options provided, power information outut will "
                  "not be verbose \n Format - Hosntame : Node power value\n";
-  }
-  try {
-    char* usingMPIstr = getenv("VARIORUM_USING_MPI");
-    if (usingMPIstr == NULL) {
-      throw 10;
-    }
-    if (strcmp(usingMPIstr, "false") == 0 || strcmp(usingMPIstr, "") == 0) {
-      throw 20;
-    }
-    if (strcmp(usingMPIstr, "true") == 0) {
-    }
-  } catch (int e) {
-    std::cout << "No MPI Option provided, not using per rank output"
-              << std::endl;
-    
   }
   // Simple timer code to keep track of the general amount of time the
   // application ran for.
   time(&start_time);
   std::cout << "Start Time: " << start_time << "\n";
-
-  
 }
 
 std::string deviceTypeToString(
@@ -371,7 +348,7 @@ void kokkosp_begin_parallel_for(const char* name, const uint32_t devID,
     filemake++;
   }
 
-  writeToFile(filename, "name: " + std::string(name)+"  ");
+  writeToFile(filename, "name: " + std::string(name) + "  ");
 
   auto result = Kokkos::Tools::Experimental::identifier_from_devid(devID);
   output +=
@@ -379,6 +356,7 @@ void kokkosp_begin_parallel_for(const char* name, const uint32_t devID,
       " Instance ID: " + std::to_string(result.instance_id) + " DeviceType: " +
       deviceTypeToString(static_cast<Kokkos::Tools::Experimental::DeviceType>(
           result.device_id));
+  gdevID = result.device_id;
   writeToFile(filename, output);
 
   variorum_call();
@@ -400,6 +378,7 @@ void kokkosp_begin_parallel_scan(const char* name, const uint32_t devID,
       " Instance ID: " + std::to_string(result.instance_id) + " DeviceType: " +
       deviceTypeToString(static_cast<Kokkos::Tools::Experimental::DeviceType>(
           result.device_id));
+  gdevID = result.device_id;
   writeToFile(filename, output);
   variorum_call();
 }
@@ -421,7 +400,7 @@ void kokkosp_begin_parallel_reduce(const char* name, const uint32_t devID,
       deviceTypeToString(static_cast<Kokkos::Tools::Experimental::DeviceType>(
           result.device_id));
   writeToFile(filename, output);
-
+  gdevID = result.device_id;
   variorum_call();
 }
 
