@@ -34,23 +34,25 @@
 // double power1      = 0;//This variable is used to obtain the initial power
 // for calculation double power2      = 0;//This variable is used to obtain the
 // final power for calculation
-double power[2]      = {0, 0};  // Array for initial and final power for calculation
-long long timearr[2] = {0,
-                        0};  // Array for initial and final time for calculation
-uint32_t gdevID      = -1;  // This variable is used to access the device ID from any
+double power[2] = {
+    0, 0};  // Array that stores initial and final power values for calculation
+long long timearr[2] = {
+    0, 0};  // Array that stores initial and final time value for calculation
+long long time1 =
+    0;  // This variable is used to obtain the initial time for calculation
+long long time2 =
+    0;  // This variable is used to obtain the final time for calculation
+uint32_t gdevID = -1;  // This variable is used to access the device ID from any
                        // function throughout the program
-std::string filename;  // This variable is used to access the filename from any
-                       // function throughout the program
-bool fileExist = false;  // This is a boolean to only create the output file
-                         // once
-std::string gname;  // This is a variable to access the name of the kernel
-                    // throughout the program
-std::string deviceID;  // This is a variable to access the Device ID throughout
-                       // the program
-std::string instanceID;  // This is a variable to access the Instance ID
-                         // throughout the program
-std::string devicetype;  ////This is a variable to access the Device Type
-                         ///throughout the program
+std::string filename;    // Stores file name so that it can be used globaly
+bool fileExist = false;  // Boolean used to ensure file only created once
+std::string gname;  // Global variable to use the name of the kernel in multiple
+                    // functions
+std::string deviceID;  // GLova variable to use device ID in multiple functions
+std::string
+    instanceID;  // Global variable to use instance ID in multiple functions
+std::string
+    devicetype;  // Global variable to use device type in multiple functions
 // This is a global output string that can be used to place variables to be
 // printed to the output file
 std::string output = "";
@@ -182,7 +184,6 @@ void variorum_call() {
   int num_sockets = 0;
 
   if (type_of_profiling == 0) {
-    // output  = variorum_print_power_call();
     char* s = variorum_json_call();
 
     // power += 1;
@@ -247,9 +248,8 @@ void variorum_call() {
       temp        = timearr[1];
       int avg     = power[1] + power[0];
       double calc = ((avg / 2) * ((temp - timearr[0]) * .001));
-      output += "name: " + gname + " Device ID: " + deviceID +
-                " Instance ID: " + instanceID + " DeviceType: " + devicetype +
-                "\n";
+      output      = "name: " + gname + " Device ID: " + deviceID +
+               " Instance ID: " + instanceID + " DeviceType: " + devicetype;
       writeToFile(filename, output);
       writeToFile(filename, " Energy Estimation in Joules " +
                                 std::to_string(calc) + "\n");
@@ -342,15 +342,14 @@ std::string deviceTypeToString(
 
 void kokkosp_begin_parallel_for(const char* name, const uint32_t devID,
                                 uint64_t* kID) {
+  static bool output_written = false;
   auto result = Kokkos::Tools::Experimental::identifier_from_devid(devID);
   gname       = std::string(name);
   deviceID    = std::to_string(result.device_id);
   instanceID  = std::to_string(result.instance_id);
   devicetype  = deviceTypeToString(
       static_cast<Kokkos::Tools::Experimental::DeviceType>(result.device_id));
-
   gdevID = result.device_id;
-
   variorum_call();
 }
 
@@ -358,13 +357,13 @@ void kokkosp_end_parallel_for(const uint64_t kID) { variorum_call(); }
 
 void kokkosp_begin_parallel_scan(const char* name, const uint32_t devID,
                                  uint64_t* kID) {
+  static bool output_written = false;
   auto result = Kokkos::Tools::Experimental::identifier_from_devid(devID);
   gname       = std::string(name);
   deviceID    = std::to_string(result.device_id);
   instanceID  = std::to_string(result.instance_id);
   devicetype  = deviceTypeToString(
       static_cast<Kokkos::Tools::Experimental::DeviceType>(result.device_id));
-
   gdevID = result.device_id;
   variorum_call();
 }
@@ -380,7 +379,6 @@ void kokkosp_begin_parallel_reduce(const char* name, const uint32_t devID,
   instanceID  = std::to_string(result.instance_id);
   devicetype  = deviceTypeToString(
       static_cast<Kokkos::Tools::Experimental::DeviceType>(result.device_id));
-
   gdevID = result.device_id;
   variorum_call();
 }
