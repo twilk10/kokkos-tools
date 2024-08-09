@@ -31,23 +31,26 @@
 #include <chrono>
 #include <iostream>
 #include <fstream>
-int power = -1;  // This variable is used to keep track of if variorum call has
-                 // been called twice to check if the variables need to be reset
-                 // for the next kernel
-double power1 =
-    0;  // This variable is used to obtain the initial power for calculation
-double power2 =
-    0;  // This variable is used to obtain the final power for calculation
-int filemake = -1;  // This variable is to check if the file has already been
-                    // made earlier in the program
-long long time1 =
-    0;  // This variable is used to obtain the initial time for calculation
-long long time2 =
-    0;  // This variable is used to obtain the final time for calculation
-uint32_t gdevID = -1;  // This variable is used to access the device ID from any
+// double power1      = 0;//This variable is used to obtain the initial power
+// for calculation double power2      = 0;//This variable is used to obtain the
+// final power for calculation
+double power[2]      = {0, 0};  // Array for initial and final power for calculation
+long long timearr[2] = {0,
+                        0};  // Array for initial and final time for calculation
+uint32_t gdevID      = -1;  // This variable is used to access the device ID from any
                        // function throughout the program
-std::string filename;  // This variable is to access the file from any function
-                       // throughout the project
+std::string filename;  // This variable is used to access the filename from any
+                       // function throughout the program
+bool fileExist = false;  // This is a boolean to only create the output file
+                         // once
+std::string gname;  // This is a variable to access the name of the kernel
+                    // throughout the program
+std::string deviceID;  // This is a variable to access the Device ID throughout
+                       // the program
+std::string instanceID;  // This is a variable to access the Instance ID
+                         // throughout the program
+std::string devicetype;  ////This is a variable to access the Device Type
+                         ///throughout the program
 // This is a global output string that can be used to place variables to be
 // printed to the output file
 std::string output = "";
@@ -87,7 +90,7 @@ static endFunction endForCallee                = NULL;
 static endFunction endScanCallee               = NULL;
 static endFunction endReduceCallee             = NULL;
 
-// the output path for ranekd output files
+// the output path for ranked output files
 std::string printpath = "./";
 
 // variables for simple timer
@@ -101,14 +104,12 @@ inline std::string getFile(const char* env_var_name) {
   if (!parsed_output_file) {
     std::cerr << "Couldn't parse KOKKOS_TOOLS_VARIORUM_OUTPUT_FILE environment "
                  "variable! Printed to variorumoutput.txt\n";
-    //  parsed_output_file = "variorumoutput.txt";
-    char vararr[19]    = "variorumoutput.txt";
-    parsed_output_file = vararr;
+    return "variorumoutput.txt";
   }
   return std::string(parsed_output_file);
 }
 
-void printFile() {
+void createFile() {
   filename = getFile("KOKKOS_TOOLS_VARIORUM_OUTPUT_FILE");
 
   std::ifstream infile(filename);
@@ -142,13 +143,18 @@ std::string variorum_print_power_call() {
   int ret;
   ret = variorum_get_power_json(&s);
   if (ret != 0) {
-    return "Print power failed!\n";
+    // return "Print power failed!\n";
   }
   json_t* power_obj = json_loads(s, JSON_DECODE_ANY, NULL);
   // total node measurment
   power_node = json_real_value(json_object_get(power_obj, "power_node"));
-  const char* hostnameChar =
+  const std::string hostnameChar =
       json_string_value(json_object_get(power_obj, "hostname"));
+
+  outputString += hostnameChar + ": " + std::to_string(power_node) + "\n";
+  outputString = "";
+
+  return outputString;
 }
 // Function: variorum_json_call()
 // Description: function that will call variorum print json and handle the
@@ -176,10 +182,10 @@ void variorum_call() {
   int num_sockets = 0;
 
   if (type_of_profiling == 0) {
-    output  = variorum_print_power_call();
+    // output  = variorum_print_power_call();
     char* s = variorum_json_call();
 
-    power += 1;
+    // power += 1;
 
     json_error_t error;
     json_t* root            = nullptr;
@@ -202,10 +208,10 @@ void variorum_call() {
         if (socket_object && json_is_object(socket_object)) {
           socket_0        = socket_object;
           timestamp_value = json_object_get(value, "timestamp");
-          if (time1 == 0) {
-            time1 = (long long)json_integer_value(timestamp_value);
+          if (timearr[0] == 0) {
+            timearr[0] = (long long)json_integer_value(timestamp_value);
           } else {
-            time2 = (long long)json_integer_value(timestamp_value);
+            timearr[1] = (long long)json_integer_value(timestamp_value);
           }
           break;
         }
@@ -226,10 +232,10 @@ void variorum_call() {
     json_t* power_value = json_object_get(power_gpu_watts, gpu_key.c_str());
     if (json_is_number(power_value)) {
       double power_val = json_number_value(power_value);
-      if (power1 == 0) {
-        power1 = power_val;
+      if (power[0] == 0) {
+        power[0] = power_val;
       } else {
-        power2 = power_val;
+        power[1] = power_val;
       }
 
     } else {
@@ -237,22 +243,30 @@ void variorum_call() {
                 << std::endl;
     }
 
-    if (power2 != 0 && power1 != 0) {
-      temp = time2;
-      std::string calc =
-          std::to_string((((power1 + power2) / 2) * ((temp - time1) * .001)));
-
-      writeToFile(filename, " Energy Estimation in Joules " + calc);
-      power1 = 0;
-      power2 = 0;
-      power  = -1;
-      time2  = 0;
+    if (power[0] != 0 && power[1] != 0) {
+      temp        = timearr[1];
+      int avg     = power[1] + power[0];
+      double calc = ((avg / 2) * ((temp - timearr[0]) * .001));
+      output += "name: " + gname + " Device ID: " + deviceID +
+                " Instance ID: " + instanceID + " DeviceType: " + devicetype +
+                "\n";
+      writeToFile(filename, output);
+      writeToFile(filename, " Energy Estimation in Joules " +
+                                std::to_string(calc) + "\n");
+      timearr[0] = 0;
+      power[0]   = 0;
+      power[1]   = 0;
+      timearr[1] = 0;
     }
   }
 }
 void kokkosp_init_library(const int loadSeq, const uint64_t interfaceVer,
                           const uint32_t devInfoCount,
                           Kokkos_Profiling_KokkosPDeviceInfo* deviceInfo) {
+  if (fileExist == false) {
+    createFile();
+    fileExist = true;
+  }
   char* outputPathChar;
   try {
     outputPathChar = getenv("VARIORUM_OUTPUT_PATH");
@@ -293,22 +307,7 @@ void kokkosp_init_library(const int loadSeq, const uint64_t interfaceVer,
                    "variorum print power and json \n";
     }
   }
-  try {
-    char* verbosePrintStr = getenv("VERBOSE");
-    if (verbosePrintStr == NULL) {
-      throw 10;
-    }
-    if (strcmp(verbosePrintStr, "false") == 0 ||
-        strcmp(verbosePrintStr, "") == 0) {
-      throw 20;
-    } else if (strcmp(verbosePrintStr, "true") == 0) {
-      std::cout << "Verbose power option set"
-                << "\n";
-    }
-  } catch (int e) {
-    std::cout << "No verbose options provided, power information outut will "
-                 "not be verbose \n Format - Hosntame : Node power value\n";
-  }
+
   // Simple timer code to keep track of the general amount of time the
   // application ran for.
   time(&start_time);
@@ -343,21 +342,14 @@ std::string deviceTypeToString(
 
 void kokkosp_begin_parallel_for(const char* name, const uint32_t devID,
                                 uint64_t* kID) {
-  if (filemake == -1) {
-    printFile();
-    filemake++;
-  }
-
-  writeToFile(filename, "name: " + std::string(name) + "  ");
-
   auto result = Kokkos::Tools::Experimental::identifier_from_devid(devID);
-  output +=
-      " Device ID: " + std::to_string(result.device_id) +
-      " Instance ID: " + std::to_string(result.instance_id) + " DeviceType: " +
-      deviceTypeToString(static_cast<Kokkos::Tools::Experimental::DeviceType>(
-          result.device_id));
+  gname       = std::string(name);
+  deviceID    = std::to_string(result.device_id);
+  instanceID  = std::to_string(result.instance_id);
+  devicetype  = deviceTypeToString(
+      static_cast<Kokkos::Tools::Experimental::DeviceType>(result.device_id));
+
   gdevID = result.device_id;
-  writeToFile(filename, output);
 
   variorum_call();
 }
@@ -366,20 +358,14 @@ void kokkosp_end_parallel_for(const uint64_t kID) { variorum_call(); }
 
 void kokkosp_begin_parallel_scan(const char* name, const uint32_t devID,
                                  uint64_t* kID) {
-  if (filemake == -1) {
-    printFile();
-    filemake++;
-  }
-  writeToFile(filename, "name: " + std::string(name));
-
   auto result = Kokkos::Tools::Experimental::identifier_from_devid(devID);
-  output +=
-      " Device ID: " + std::to_string(result.device_id) +
-      " Instance ID: " + std::to_string(result.instance_id) + " DeviceType: " +
-      deviceTypeToString(static_cast<Kokkos::Tools::Experimental::DeviceType>(
-          result.device_id));
+  gname       = std::string(name);
+  deviceID    = std::to_string(result.device_id);
+  instanceID  = std::to_string(result.instance_id);
+  devicetype  = deviceTypeToString(
+      static_cast<Kokkos::Tools::Experimental::DeviceType>(result.device_id));
+
   gdevID = result.device_id;
-  writeToFile(filename, output);
   variorum_call();
 }
 
@@ -387,19 +373,14 @@ void kokkosp_end_parallel_scan(const uint64_t kID) { variorum_call(); }
 
 void kokkosp_begin_parallel_reduce(const char* name, const uint32_t devID,
                                    uint64_t* kID) {
-  if (filemake == -1) {
-    printFile();
-    filemake++;
-  }
-  writeToFile(filename, "name: " + std::string(name));
-
+  static bool output_written = false;
   auto result = Kokkos::Tools::Experimental::identifier_from_devid(devID);
-  output +=
-      " Device ID: " + std::to_string(result.device_id) +
-      " Instance ID: " + std::to_string(result.instance_id) + " DeviceType: " +
-      deviceTypeToString(static_cast<Kokkos::Tools::Experimental::DeviceType>(
-          result.device_id));
-  writeToFile(filename, output);
+  gname       = std::string(name);
+  deviceID    = std::to_string(result.device_id);
+  instanceID  = std::to_string(result.instance_id);
+  devicetype  = deviceTypeToString(
+      static_cast<Kokkos::Tools::Experimental::DeviceType>(result.device_id));
+
   gdevID = result.device_id;
   variorum_call();
 }
@@ -426,6 +407,7 @@ extern "C" {
 
 namespace impl = KokkosTools::VariorumConnector;
 
+EXPOSE_INIT(impl::kokkosp_init_library)
 EXPOSE_BEGIN_PARALLEL_FOR(impl::kokkosp_begin_parallel_for)
 EXPOSE_END_PARALLEL_FOR(impl::kokkosp_end_parallel_for)
 EXPOSE_BEGIN_PARALLEL_SCAN(impl::kokkosp_begin_parallel_scan)
