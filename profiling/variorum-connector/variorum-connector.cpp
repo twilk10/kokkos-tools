@@ -1,5 +1,4 @@
 //@HEADER
-//
 // ************************************************************************
 //
 //                        Kokkos v. 4.0
@@ -15,306 +14,155 @@
 //
 //@HEADER
 
-// Modified by Zach Frye at LLNL
-// Contact: frye7@llnl.gov
-// Organization: CASC at LLNL
+#include "kp_core.hpp"
 
-#include <stdio.h>
-#include <inttypes.h>
-#include <cstdlib>
-#include <cstring>
-#include <vector>
-#include <unordered_set>
-#include <string>
-#include <regex>
-#include <ctime>
-#include <chrono>
-#include <iostream>
-#include <fstream>
-// double power1      = 0;//This variable is used to obtain the initial power
-// for calculation double power2      = 0;//This variable is used to obtain the
-// final power for calculation
-double power[2] = {
-    0, 0};  // Array that stores initial and final power values for calculation
-long long timearr[2] = {
-    0, 0};  // Array that stores initial and final time value for calculation
-long long time1 =
-    0;  // This variable is used to obtain the initial time for calculation
-long long time2 =
-    0;  // This variable is used to obtain the final time for calculation
-uint32_t gdevID = -1;  // This variable is used to access the device ID from any
-                       // function throughout the program
-std::string filename;    // Stores file name so that it can be used globaly
-bool fileExist = false;  // Boolean used to ensure file only created once
-std::string gname;  // Global variable to use the name of the kernel in multiple
-                    // functions
-std::string deviceID;  // GLova variable to use device ID in multiple functions
-std::string
-    instanceID;  // Global variable to use instance ID in multiple functions
-std::string
-    devicetype;  // Global variable to use device type in multiple functions
-// This is a global output string that can be used to place variables to be
-// printed to the output file
-std::string output = "";
-// This variable is a file name variorum output for the output of the variorum
-// call
-// variorum trial run
 extern "C" {
 #include <variorum.h>
 #include <jansson.h>
 }
 
-#include "kp_core.hpp"
-
-#if USE_MPI
-#include <mpi.h>
-#endif
+#include <iostream>
+#include <fstream>
 
 namespace KokkosTools {
 namespace VariorumConnector {
 
-bool filterKernels;
-uint64_t nextKernelID;
-std::vector<std::regex> kernelNames;
-std::unordered_set<uint64_t> activeKernels;
+// Initial and final power values for a kernel
+double global_power[2] = {0, 0};
+// Initial and final time value for a kernel
+long long global_time[2]    = {0, 0};
+uint32_t global_device_id   = -1;
+uint32_t global_instance_id = -1;
+std::string global_filename;
+std::string global_kernel_name;
+std::string global_device_type;
 
-typedef void (*initFunction)(const int, const uint64_t, const uint32_t, void*);
-typedef void (*finalizeFunction)();
-typedef void (*beginFunction)(const char*, const uint32_t, uint64_t*);
-typedef void (*endFunction)(uint64_t);
+using initFunction = void (*)(const int, const uint64_t, const uint32_t, void*);
+using finalizeFunction = void (*)();
+using beginFunction    = void (*)(const char*, const uint32_t, uint64_t*);
+using endFunction      = void (*)(uint64_t);
 
-static initFunction initProfileLibrary         = NULL;
-static finalizeFunction finalizeProfileLibrary = NULL;
-static beginFunction beginForCallee            = NULL;
-static beginFunction beginScanCallee           = NULL;
-static beginFunction beginReduceCallee         = NULL;
-static endFunction endForCallee                = NULL;
-static endFunction endScanCallee               = NULL;
-static endFunction endReduceCallee             = NULL;
+static initFunction initProfileLibrary         = nullptr;
+static finalizeFunction finalizeProfileLibrary = nullptr;
+static beginFunction beginForCallee            = nullptr;
+static beginFunction beginScanCallee           = nullptr;
+static beginFunction beginReduceCallee         = nullptr;
+static endFunction endForCallee                = nullptr;
+static endFunction endScanCallee               = nullptr;
+static endFunction endReduceCallee             = nullptr;
 
-// the output path for ranked output files
-std::string printpath = "./";
-
-// variables for simple timer
-time_t start_time;
-
-int type_of_profiling =
-    0;  // 0 is for both print power & json, 1 is for print power, 2 is for json
-
-inline std::string getFile(const char* env_var_name) {
+inline std::string get_file_name(const char* env_var_name) {
   char* parsed_output_file = getenv(env_var_name);
   if (!parsed_output_file) {
-    std::cerr << "Couldn't parse KOKKOS_TOOLS_VARIORUM_OUTPUT_FILE environment "
-                 "variable! Printed to variorumoutput.txt\n";
+    std::cerr << "Couldn't parse " << env_var_name
+              << " environment "
+                 "variable! Printing to variorumoutput.txt\n";
     return "variorumoutput.txt";
   }
   return std::string(parsed_output_file);
 }
 
-void createFile() {
-  filename = getFile("KOKKOS_TOOLS_VARIORUM_OUTPUT_FILE");
+void create_file() {
+  global_filename = get_file_name("KOKKOS_TOOLS_VARIORUM_OUTPUT_FILE");
 
-  std::ifstream infile(filename);
+  std::ifstream infile(global_filename);
   if (infile.good()) {
     infile.close();
-    std::ofstream file(filename, std::ios::trunc);
+    std::ofstream file(global_filename, std::ios::trunc);
   } else {
-    std::ofstream file(filename, std::ios::app);
-  }
-}
-inline void writeToFile(const std::string& filename, const std::string& data) {
-  std::ofstream file(filename, std::ios::app);
-  if (file) {
-    file << data;
+    std::ofstream file(global_filename, std::ios::app);
   }
 }
 
-// Function: variorum_print_power_call
-// Description: Prints out power data in two ways: Verbose and non verbose.
-//              verbose will print out each component of the systems power draw
-//              in the sierra architecture. non-verbose will print the node
-//              power.
-// Pre: None
-// Post: Will print an error message if variorum print power fails. No return
-// value.
-std::string variorum_print_power_call() {
-  std::string outputString;
-  char* s = nullptr;
-  double power_node, power_sock0, power_mem0, power_gpu0;
-  double power_sock1, power_mem1, power_gpu1;
-  int ret;
-  ret = variorum_get_power_json(&s);
-  if (ret != 0) {
-    // return "Print power failed!\n";
-  }
-  json_t* power_obj = json_loads(s, JSON_DECODE_ANY, NULL);
-  // total node measurment
-  power_node = json_real_value(json_object_get(power_obj, "power_node"));
-  const std::string hostnameChar =
-      json_string_value(json_object_get(power_obj, "hostname"));
-
-  outputString += hostnameChar + ": " + std::to_string(power_node) + "\n";
-  outputString = "";
-
-  return outputString;
-}
-// Function: variorum_json_call()
-// Description: function that will call variorum print json and handle the
-// execution errors Pre: None Post: Will print an error message if variorum
-// print json fails. No return value.
-char* variorum_json_call() {
-  int ret;
-  char* s              = NULL;
-  json_t* my_power_obj = NULL;
-  my_power_obj         = json_object();
-  ret                  = variorum_get_power_json(&s);
-  if (ret != 0) {
-    printf("First run: JSON get node power failed!\n");
-  }
-  return s;
-}
-
-// Function: variorum_call
-// Description: The function determines what profiling options are selected and
-// prints the profoiling data out to std out Pre: None Post: An output message
-// if variourum returned an error or if it functioned correctly
 void variorum_call() {
-  long long temp = 0;
+  char* s              = nullptr;
+  json_t* my_power_obj = nullptr;
+  my_power_obj         = json_object();
+  int variorum_error   = variorum_get_power_json(&s);
+  if (variorum_error != 0) {
+    std::cerr << "JSON get node power failed!\n";
+    abort();
+  }
 
-  int num_sockets = 0;
+  json_error_t error;
+  json_t* root            = nullptr;
+  json_t* socket_0        = nullptr;
+  json_t* timestamp_value = nullptr;
+  json_t* power_gpu_watts = nullptr;
+  json_t* gpu_0_value     = nullptr;
 
-  if (type_of_profiling == 0) {
-    char* s = variorum_json_call();
+  // Parse JSON string into a json_t object
+  root = json_loads(s, 0, &error);
+  if (!root) {
+    fprintf(stderr, "Error parsing JSON: %s\n", error.text);
+  }
 
-    // power += 1;
-
-    json_error_t error;
-    json_t* root            = nullptr;
-    json_t* socket_0        = nullptr;
-    json_t* timestamp_value = nullptr;
-    json_t* power_gpu_watts = nullptr;
-    json_t* gpu_0_value     = nullptr;
-
-    // Parse JSON string into a json_t object
-    root = json_loads(s, 0, &error);
-    if (!root) {
-      fprintf(stderr, "Error parsing JSON: %s\n", error.text);
-    }
-
-    const char* key;
-    json_t* value;
-    json_object_foreach(root, key, value) {
-      if (json_is_object(value)) {
-        json_t* socket_object = json_object_get(value, "socket_0");
-        if (socket_object && json_is_object(socket_object)) {
-          socket_0        = socket_object;
-          timestamp_value = json_object_get(value, "timestamp");
-          if (timearr[0] == 0) {
-            timearr[0] = (long long)json_integer_value(timestamp_value);
-          } else {
-            timearr[1] = (long long)json_integer_value(timestamp_value);
-          }
-          break;
+  const char* key;
+  json_t* value;
+  json_object_foreach(root, key, value) {
+    if (json_is_object(value)) {
+      json_t* socket_object = json_object_get(value, "socket_0");
+      if (socket_object && json_is_object(socket_object)) {
+        socket_0        = socket_object;
+        timestamp_value = json_object_get(value, "timestamp");
+        if (global_time[0] == 0) {
+          global_time[0] = (long long)json_integer_value(timestamp_value);
+        } else {
+          global_time[1] = (long long)json_integer_value(timestamp_value);
         }
+        break;
       }
-    }
-    // FIXME We assume that all GPUs are on socket 0 for now.
-    if (!socket_0 || !timestamp_value) {
-      fprintf(stderr, "Failed to find 'socket_0' object or 'timestamp'.\n");
-    }
-
-    // Access power_gpu_watts within socket_0
-    power_gpu_watts = json_object_get(socket_0, "power_gpu_watts");
-    if (!json_is_object(power_gpu_watts)) {
-      fprintf(stderr, "Expected 'power_gpu_watts' to be an object.\n");
-    }
-
-    std::string gpu_key = "GPU_" + std::to_string(gdevID);
-    json_t* power_value = json_object_get(power_gpu_watts, gpu_key.c_str());
-    if (json_is_number(power_value)) {
-      double power_val = json_number_value(power_value);
-      if (power[0] == 0) {
-        power[0] = power_val;
-      } else {
-        power[1] = power_val;
-      }
-
-    } else {
-      std::cerr << "Error: GPU key " << gpu_key << " not found or not a number"
-                << std::endl;
-    }
-
-    if (power[0] != 0 && power[1] != 0) {
-      temp        = timearr[1];
-      int avg     = power[1] + power[0];
-      double calc = ((avg / 2) * ((temp - timearr[0]) * .001));
-      output      = "name: " + gname + " Device ID: " + deviceID +
-               " Instance ID: " + instanceID + " DeviceType: " + devicetype;
-      writeToFile(filename, output);
-      writeToFile(filename, " Energy Estimation in Joules " +
-                                std::to_string(calc) + "\n");
-      timearr[0] = 0;
-      power[0]   = 0;
-      power[1]   = 0;
-      timearr[1] = 0;
     }
   }
+  // FIXME We assume that all GPUs are on socket 0 for now.
+  if (!socket_0 || !timestamp_value) {
+    fprintf(stderr, "Failed to find 'socket_0' object or 'timestamp'.\n");
+  }
+
+  // Access power_gpu_watts within socket_0
+  power_gpu_watts = json_object_get(socket_0, "power_gpu_watts");
+  if (!json_is_object(power_gpu_watts)) {
+    fprintf(stderr, "Expected 'power_gpu_watts' to be an object.\n");
+  }
+
+  std::string gpu_key = "GPU_" + std::to_string(global_device_id);
+  json_t* power_value = json_object_get(power_gpu_watts, gpu_key.c_str());
+  if (json_is_number(power_value)) {
+    double power_val = json_number_value(power_value);
+    if (global_power[0] == 0) {
+      global_power[0] = power_val;
+    } else {
+      global_power[1] = power_val;
+    }
+  } else {
+    std::cerr << "Error: GPU key " << gpu_key << " not found or not a number"
+              << std::endl;
+  }
+
+  if (global_power[0] != 0 && global_power[1] != 0) {
+    int average_power = global_power[1] + global_power[0];
+    double energy =
+        ((average_power / 2) * ((global_time[1] - global_time[0]) * .001));
+    std::ofstream file(global_filename, std::ios::app);
+    file << "name: \"" << global_kernel_name
+         << "\", Device ID: " << global_device_id
+         << ", Instance ID: " << global_instance_id
+         << ", DeviceType: " << global_device_type
+         << ", Energy Estimate: " << energy << " J\n";
+    global_time[0]  = 0;
+    global_power[0] = 0;
+    global_power[1] = 0;
+    global_time[1]  = 0;
+  }
 }
+
 void kokkosp_init_library(const int loadSeq, const uint64_t interfaceVer,
                           const uint32_t devInfoCount,
                           Kokkos_Profiling_KokkosPDeviceInfo* deviceInfo) {
-  if (fileExist == false) {
-    createFile();
-    fileExist = true;
-  }
-  char* outputPathChar;
-  try {
-    outputPathChar = getenv("VARIORUM_OUTPUT_PATH");
-    if (outputPathChar == NULL) {
-      throw 10;
-    }
-    std::string outputPathStr(outputPathChar);
-    printpath = outputPathStr;
-    std::cout << "Output Path set to" << outputPathChar << "\n";
-  } catch (int e) {
-    if (e == 10) {
-      printpath = "./";
-      std::cout << "No output path provided, the application will output to "
-                   "the default path \n";
-    }
-  }
-
-  // Profiling options are read in from their enviornment variables and the
-  // options are set
-  char* profiling_type;
-  try {
-    profiling_type = getenv("KOKKOS_VARIORUM_FUNC_TYPE");
-    if (profiling_type == NULL) {
-      throw 10;
-    }
-    if (strcmp(profiling_type, "ppower") == 0) {
-      type_of_profiling = 1;
-      std::cout << "Variorum print power will be called\n";
-    } else if (strcmp(profiling_type, "json") == 0) {
-      type_of_profiling = 2;
-    } else if (strcmp(profiling_type, "both") == 0) {
-      type_of_profiling = 0;
-    }
-  } catch (int e) {
-    if (e == 10) {
-      type_of_profiling = 0;
-      std::cout << "No profiling options provided, profiling tool will call "
-                   "variorum print power and json \n";
-    }
-  }
-
-  // Simple timer code to keep track of the general amount of time the
-  // application ran for.
-  time(&start_time);
-  std::cout << "Start Time: " << start_time << "\n";
+  create_file();
 }
 
-std::string deviceTypeToString(
+std::string device_type_to_string(
     const Kokkos::Tools::Experimental::DeviceType& deviceType) {
   switch (deviceType) {
     case Kokkos::Tools::Experimental::DeviceType::Serial:
@@ -342,14 +190,11 @@ std::string deviceTypeToString(
 
 void kokkosp_begin_parallel_for(const char* name, const uint32_t devID,
                                 uint64_t* kID) {
-  static bool output_written = false;
   auto result = Kokkos::Tools::Experimental::identifier_from_devid(devID);
-  gname       = std::string(name);
-  deviceID    = std::to_string(result.device_id);
-  instanceID  = std::to_string(result.instance_id);
-  devicetype  = deviceTypeToString(
-      static_cast<Kokkos::Tools::Experimental::DeviceType>(result.device_id));
-  gdevID = result.device_id;
+  global_kernel_name = std::string(name);
+  global_instance_id = result.instance_id;
+  global_device_type = device_type_to_string(result.type);
+  global_device_id   = result.device_id;
   variorum_call();
 }
 
@@ -357,14 +202,11 @@ void kokkosp_end_parallel_for(const uint64_t kID) { variorum_call(); }
 
 void kokkosp_begin_parallel_scan(const char* name, const uint32_t devID,
                                  uint64_t* kID) {
-  static bool output_written = false;
   auto result = Kokkos::Tools::Experimental::identifier_from_devid(devID);
-  gname       = std::string(name);
-  deviceID    = std::to_string(result.device_id);
-  instanceID  = std::to_string(result.instance_id);
-  devicetype  = deviceTypeToString(
-      static_cast<Kokkos::Tools::Experimental::DeviceType>(result.device_id));
-  gdevID = result.device_id;
+  global_kernel_name = std::string(name);
+  global_instance_id = result.instance_id;
+  global_device_type = device_type_to_string(result.type);
+  global_device_id   = result.device_id;
   variorum_call();
 }
 
@@ -372,14 +214,11 @@ void kokkosp_end_parallel_scan(const uint64_t kID) { variorum_call(); }
 
 void kokkosp_begin_parallel_reduce(const char* name, const uint32_t devID,
                                    uint64_t* kID) {
-  static bool output_written = false;
   auto result = Kokkos::Tools::Experimental::identifier_from_devid(devID);
-  gname       = std::string(name);
-  deviceID    = std::to_string(result.device_id);
-  instanceID  = std::to_string(result.instance_id);
-  devicetype  = deviceTypeToString(
-      static_cast<Kokkos::Tools::Experimental::DeviceType>(result.device_id));
-  gdevID = result.device_id;
+  global_kernel_name = std::string(name);
+  global_instance_id = result.instance_id;
+  global_device_type = device_type_to_string(result.type);
+  global_device_id   = result.device_id;
   variorum_call();
 }
 
