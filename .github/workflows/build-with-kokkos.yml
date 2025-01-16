@@ -90,9 +90,9 @@ jobs:
         working-directory: variorum
         run: |
           cp ${GITHUB_WORKSPACE}/kokkos.presets.json CMakePresets.json
-          cmake -S src --preset=${{ matrix.preset }}
-          cmake --build --preset=${{ matrix.preset }}
-          cmake --install build-with-${{ matrix.preset }} --prefix=${Variorum_ROOT}
+          cmake -S src -B build
+          cd build
+          cmake --install --prefix=${Variorum_ROOT}
       - name: Compile and install Kokkos
         working-directory: kokkos
         run: |
