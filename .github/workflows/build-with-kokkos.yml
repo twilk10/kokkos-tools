@@ -92,9 +92,9 @@ jobs:
         working-directory: variorum
         run: |
           cp ${GITHUB_WORKSPACE}/kokkos.presets.json CMakePresets.json
-          cmake -S src -B build
+          cmake -S src -B build -DCMAKE_INSTALL_PREFIX=${Variorum_ROOT}
           cd build
-          cmake --install --prefix=${Variorum_ROOT}
+          make install
       - name: Compile and install Kokkos
         working-directory: kokkos
         run: |
