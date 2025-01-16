@@ -29,6 +29,7 @@ jobs:
       image: ${{ matrix.image }}
     env:
       Kokkos_ROOT: /opt/kokkos
+      Variorum_ROOT: /opt/variorum
     steps:
       - name: Checkout Kokkos Tools
         uses: actions/checkout@v4
@@ -38,6 +39,12 @@ jobs:
           repository: kokkos/kokkos
           path: kokkos
           ref: develop
+      - name: Checkout Varioum
+        uses: actions/checkout@v4
+        with:
+          repository: LLNL/variorum
+          path: variorum
+          ref: 249a39bf41972afe2213d3dc904e47647364f466
       - name: Install compilers
         run : |
           apt update
@@ -79,6 +86,13 @@ jobs:
             libopenmpi-dev \
             systemtap-sdt-dev \
             libpapi-dev
+      - name: Compile and install Variorum
+        working-directory: variorum
+        run: |
+          cp ${GITHUB_WORKSPACE}/kokkos.presets.json CMakePresets.json
+          cmake -S src --preset=${{ matrix.preset }}
+          cmake --build --preset=${{ matrix.preset }}
+          cmake --install build-with-${{ matrix.preset }} --prefix=${Variorum_ROOT}
       - name: Compile and install Kokkos
         working-directory: kokkos
         run: |
@@ -88,6 +102,7 @@ jobs:
           cmake --install build-with-${{ matrix.preset }} --prefix=${Kokkos_ROOT}
       - name: Build Kokkos Tools, enabling examples
         run: |
+          export CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH};${VARIORUM_ROOT}
           cmake -S . --preset=${{ matrix.preset }}
           cmake --build --preset=${{ matrix.preset }}
           cmake --install build-with-${{ matrix.preset }} --prefix=/opt/kokkos-tools
