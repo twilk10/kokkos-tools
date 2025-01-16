@@ -92,7 +92,7 @@ void variorum_call() {
   // Parse JSON string into a json_t object
   root = json_loads(s, 0, &error);
   if (!root) {
-    fprintf(stderr, "Error parsing JSON: %s\n", error.text);
+    std::cerr << "Error parsing JSON: " << error.text << '\n';
   }
 
   const char* key;
@@ -114,13 +114,13 @@ void variorum_call() {
   }
   // FIXME We assume that all GPUs are on socket 0 for now.
   if (!socket_0 || !timestamp_value) {
-    fprintf(stderr, "Failed to find 'socket_0' object or 'timestamp'.\n");
+    std::cerr << "Failed to find 'socket_0' object or 'timestamp'.\n";
   }
 
   // Access power_gpu_watts within socket_0
   power_gpu_watts = json_object_get(socket_0, "power_gpu_watts");
   if (!json_is_object(power_gpu_watts)) {
-    fprintf(stderr, "Expected 'power_gpu_watts' to be an object.\n");
+    std::cerr < "Expected 'power_gpu_watts' to be an object.\n";
   }
 
   std::string gpu_key = "GPU_" + std::to_string(global_device_id);
