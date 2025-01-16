@@ -75,8 +75,8 @@ void create_file() {
 }
 
 void variorum_call() {
-  char* s              = nullptr;
-  int variorum_error   = variorum_get_power_json(&s);
+  char* s            = nullptr;
+  int variorum_error = variorum_get_power_json(&s);
   if (variorum_error != 0) {
     std::cerr << "JSON get node power failed!\n";
     abort();
