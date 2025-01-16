@@ -50,17 +50,18 @@ jobs:
           apt update
 
           if [ ${{ matrix.compiler }} != 'default' ];then
-              apt --yes --no-install-recommends install ${{ matrix.compiler.c }} ${{ matrix.compiler.cpp }}
+              apt --yes --no-install-recommends install ${{ matrix.compiler.c }} ${{ matrix.compiler.cpp }} gfortran
               export CC=${{ matrix.compiler.c }}
               export CXX=${{ matrix.compiler.cpp }}
           else
-              apt --yes --no-install-recommends install gcc g++
+              apt --yes --no-install-recommends install gcc g++ gfortran
               export CC=gcc
               export CXX=g++
           fi
 
           echo "CC=$CC"   >> $GITHUB_ENV
           echo "CXX=$CXX" >> $GITHUB_ENV
+          echo "FC=gfortran" >> $GITHUB_ENV
 
           case ${{ matrix.preset }} in
               *OpenMP* )
