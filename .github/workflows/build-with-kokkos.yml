@@ -29,7 +29,7 @@ jobs:
       image: ${{ matrix.image }}
     env:
       Kokkos_ROOT: /opt/kokkos
-      Variorum_ROOT: /opt/variorum
+      VARIORUM_ROOT: /opt/variorum
     steps:
       - name: Checkout Kokkos Tools
         uses: actions/checkout@v4
@@ -92,7 +92,7 @@ jobs:
         working-directory: variorum
         run: |
           cp ${GITHUB_WORKSPACE}/kokkos.presets.json CMakePresets.json
-          cmake -S src -B build -DCMAKE_INSTALL_PREFIX=${Variorum_ROOT}
+          cmake -S src -B build -DCMAKE_INSTALL_PREFIX=${VARIORUM_ROOT}
           cd build
           make install
       - name: Compile and install Kokkos
