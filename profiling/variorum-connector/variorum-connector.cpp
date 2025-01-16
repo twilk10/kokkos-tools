@@ -59,7 +59,7 @@ inline std::string get_file_name(const char* env_var_name) {
                  "variable! Printing to variorumoutput.txt\n";
     return "variorumoutput.txt";
   }
-  return std::string(parsed_output_file);
+  return parsed_output_file;
 }
 
 void create_file() {
@@ -189,7 +189,7 @@ std::string device_type_to_string(
 void kokkosp_begin_parallel_for(const char* name, const uint32_t devID,
                                 uint64_t* kID) {
   auto result = Kokkos::Tools::Experimental::identifier_from_devid(devID);
-  global_kernel_name = std::string(name);
+  global_kernel_name = name;
   global_instance_id = result.instance_id;
   global_device_type = device_type_to_string(result.type);
   global_device_id   = result.device_id;
@@ -201,7 +201,7 @@ void kokkosp_end_parallel_for(const uint64_t kID) { variorum_call(); }
 void kokkosp_begin_parallel_scan(const char* name, const uint32_t devID,
                                  uint64_t* kID) {
   auto result = Kokkos::Tools::Experimental::identifier_from_devid(devID);
-  global_kernel_name = std::string(name);
+  global_kernel_name = name;
   global_instance_id = result.instance_id;
   global_device_type = device_type_to_string(result.type);
   global_device_id   = result.device_id;
@@ -213,7 +213,7 @@ void kokkosp_end_parallel_scan(const uint64_t kID) { variorum_call(); }
 void kokkosp_begin_parallel_reduce(const char* name, const uint32_t devID,
                                    uint64_t* kID) {
   auto result = Kokkos::Tools::Experimental::identifier_from_devid(devID);
-  global_kernel_name = std::string(name);
+  global_kernel_name = name;
   global_instance_id = result.instance_id;
   global_device_type = device_type_to_string(result.type);
   global_device_id   = result.device_id;
