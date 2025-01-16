@@ -79,13 +79,14 @@ jobs:
                   exit -1
           esac
 
-      - name: Install git, CMake, OpenMPI, PAPI and dtrace
+      - name: Install git, CMake, Jansson, OpenMPI, PAPI and dtrace
         run: |
           apt --yes --no-install-recommends install \
             git ca-certificates \
             cmake make \
             libopenmpi-dev \
             systemtap-sdt-dev \
+            libjansson-dev \
             libpapi-dev
       - name: Compile and install Variorum
         working-directory: variorum
