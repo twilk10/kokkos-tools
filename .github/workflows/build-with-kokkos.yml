@@ -108,7 +108,9 @@ jobs:
           cmake --build --preset=${{ matrix.preset }}
           cmake --install build-with-${{ matrix.preset }} --prefix=/opt/kokkos-tools
       # For now, GitHub runners are used. These runner don't have GPUs. Therefore, testing can only be done for OpenMP.
+      # Skip variorum test since we can't rely on the hardware to compatible.
       - name: Run tests
         if: ${{ matrix.preset == 'OpenMP' }}
         run: |
+          export GTEST_FILTER=-test_kokkos_tools_variorum
           ctest --preset=${{ matrix.preset }}
