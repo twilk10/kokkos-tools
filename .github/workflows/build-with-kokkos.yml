@@ -112,5 +112,4 @@ jobs:
       - name: Run tests
         if: ${{ matrix.preset == 'OpenMP' }}
         run: |
-          export GTEST_FILTER=-test_kokkos_tools_variorum
-          ctest --preset=${{ matrix.preset }}
+          ctest -E "test_kokkos_tools_variorum" --preset=${{ matrix.preset }}
