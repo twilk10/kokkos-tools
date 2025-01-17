@@ -104,7 +104,6 @@ jobs:
           cmake --install build-with-${{ matrix.preset }} --prefix=${Kokkos_ROOT}
       - name: Build Kokkos Tools, enabling examples
         run: |
-          export CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH};${VARIORUM_ROOT}
           cmake -S . --preset=${{ matrix.preset }}
           cmake --build --preset=${{ matrix.preset }}
           cmake --install build-with-${{ matrix.preset }} --prefix=/opt/kokkos-tools
