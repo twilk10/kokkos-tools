@@ -120,7 +120,7 @@ void variorum_call() {
   // Access power_gpu_watts within socket_0
   power_gpu_watts = json_object_get(socket_0, "power_gpu_watts");
   if (!json_is_object(power_gpu_watts)) {
-    std::cerr < "Expected 'power_gpu_watts' to be an object.\n";
+    std::cerr << "Expected 'power_gpu_watts' to be an object.\n";
   }
 
   std::string gpu_key = "GPU_" + std::to_string(global_device_id);
